@@ -120,7 +120,7 @@ def cross_entropy(p, q, eps=1e-10):
 def Xhat(X):
     if len(X.shape) == 1:
         return np.insert(X, 0, 1)
-    return np.insert(X, 0, 1, axis=1)
+    return np.column_stack((np.ones((X.shape[0], 1)),X))
 
 
 def grad_L(X, y, beta):
@@ -140,10 +140,9 @@ def grad_L_m(X, y, beta):
 
 
 def eval_L_m(X, y, beta):
-    return np.average([cross_entropy(y[index], sigmoid(xi @ beta)) for index, xi in enumerate(Xhat(X))])
+    return np.average([cross_entropy(y[index], softmax(xi @ beta)) for index, xi in enumerate(Xhat(X))])
 
-
-def train_model_using_stochastic_grad_descent_multi(X, y, alpha=0.1, epoch=500):
+def train_model_using_stochastic_grad_descent_multi(X, y, alpha=0.01, epoch=500):
     beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
     L_vals = []
     for _ in tqdm(range(epoch)):
@@ -155,7 +154,7 @@ def train_model_using_stochastic_grad_descent_multi(X, y, alpha=0.1, epoch=500):
     return beta, L_vals
 
 
-def train_model_using_grad_descent_multi(X, y, alpha=0.1, max_iter=100):
+def train_model_using_grad_descent_multi(X, y, alpha, max_iter):
     beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
     L_vals = []
     for _ in tqdm(range(max_iter)):
@@ -167,7 +166,7 @@ def train_model_using_grad_descent_multi(X, y, alpha=0.1, max_iter=100):
 # Multiclass Gradient descent
 class LogisticRegression:
 
-    def __init__(self, alpha=0.1, max_iter=500):
+    def __init__(self, alpha=0.01, max_iter=500):
         self.beta = None
         self.L_vals = None
         self.alpha = alpha
@@ -203,9 +202,8 @@ wine_df = wine_df[wine_df.ne('?').all(axis=1)]
 X = normalize_features(X)
 X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=42)
 
-model = LogisticRegression()
+model = LogisticRegression(alpha=0.01, max_iter=70)
 logReg = model.fit(X_train, y_train)
 draw_loss(logReg.L_vals)
 y_pred = model.predict(X_test)
 print("Accuracy using Gradient Descent: ", str(np.average(y_pred == y_test['class'].values)))
-
