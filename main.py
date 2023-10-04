@@ -186,6 +186,20 @@ class LogisticRegression:
         y_pred = [np.argmax(yi) + 1 for yi in (Xhat(X_test) @ self.beta)]
         return y_pred
 
+# Split Dataframe to N folds
+def split_dataframe(df, n_folds=5, random_seed=10):
+    df_shuffled = df.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+    fold_size = len(df_shuffled) // n_folds
+
+    folds = []
+    for i in range(n_folds):
+        if i == n_folds - 1:
+            # Store remaining data to last fold
+            folds.append(df_shuffled.iloc[i*fold_size:])
+        else:
+            folds.append(df_shuffled.iloc[i*fold_size:(i+1)*fold_size])
+
+    return folds
 
 # Fetch dataset
 wine = fetch_ucirepo(id=109)
@@ -204,6 +218,14 @@ X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y
 
 model = LogisticRegression(alpha=0.01, max_iter=70)
 logReg = model.fit(X_train, y_train)
-draw_loss(logReg.L_vals)
+#draw_loss(logReg.L_vals)
 y_pred = model.predict(X_test)
 print("Accuracy using Gradient Descent: ", str(np.average(y_pred == y_test['class'].values)))
+
+folds = split_dataframe(wine_df)
+
+for idx, fold in enumerate(folds):
+    data_train = pd.concat(folds[:idx] + folds[idx+1:])
+    data_val = fold
+    model = LogisticRegression(alpha=0.01, max_iter=70)
+    logReg = model.fit(X_train, y_train)
