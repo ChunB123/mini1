@@ -138,10 +138,14 @@ def cMatrix_log(Yhat, Y, axis=(0, 1), onehot=False):
 
 
 def printMetrics(cMat):
-    metricsList = metrics_cal(cMat)
+    accuracy, precision, recall, F1 = metrics_cal(cMat)
     print("Metrics for avg_accuracy: %f, avg_precision: %f, avg_recall: %f, avg_F1: %f" % (
-        metricsList[0], metricsList[1], metricsList[2], metricsList[3]))
+        accuracy, precision, recall, F1))
 
+
+def cMat_builder(Yhat, Y):
+    df = pd.DataFrame(data={'Predicted Values': Yhat, 'Actual Values': Y})
+    return pd.crosstab(df["Predicted Values"], df['Actual Values'])
 
 def metrics_cal(cMat):
     # Initialize the avg of metrics
@@ -156,7 +160,7 @@ def metrics_cal(cMat):
         precision += TP / (TP + FP)
         recall += TP / (TP + FN)
         F1 += 2 * precision * recall / (precision + recall)
-    return [num/cMat.shape[0] for num in [accuracy, precision, recall, F1]]
+    return accuracy / cMat.shape[0], precision / cMat.shape[0], recall / cMat.shape[0], F1 / cMat.shape[0]
 
 
 
@@ -224,7 +228,8 @@ y_test_hat = model.predict(X_test)
 
 metricsWrapper(y_train_hat, y_train['class'].values, y_test_hat, y_test['class'].values)
 
-metrics = [[], []]
+# train_accuracy, train_precision, train_recall, train_F1, test_accuracy, test_precision, test_recall, test_F1
+metrics = [0 for x in range(8)]
 folds_indices = split_indices(wine_df.index.tolist())
 for idx, indices in enumerate(split_indices(wine_df.index.tolist())):
     X_train = X.iloc[np.concatenate(folds_indices[:idx] + folds_indices[idx + 1:])]
@@ -237,5 +242,18 @@ for idx, indices in enumerate(split_indices(wine_df.index.tolist())):
     # draw_loss(logReg.L_vals)
     y_train_hat = model.predict(X_train)
     y_test_hat = model.predict(X_test)
-    #metrics[0].append(metrics_cal(cMatrix_log(y_train_hat, y_train)))
-    #metrics[1].append(metrics_cal(cMatrix_log(y_test_hat, y_test)))
+    train_accuracy, train_precision, train_recall, train_F1 = metrics_cal(cMat_builder(y_train_hat, y_train['class'].values))
+    test_accuracy, test_precision, test_recall, test_F1 = metrics_cal(cMat_builder(y_test_hat, y_test['class'].values))
+    metrics[0] += train_accuracy
+    metrics[1] += train_precision
+    metrics[2] += train_recall
+    metrics[3] += train_F1
+    metrics[4] += test_accuracy
+    metrics[5] += test_precision
+    metrics[6] += test_recall
+    metrics[7] += test_F1
+
+metrics = [metric/len(folds_indices) for metric in metrics]
+print("")
+print("Metrics for CV: train_accuracy, train_precision, train_recall, train_F1, test_accuracy, test_precision, test_recall, test_F1")
+print(metrics)
