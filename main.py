@@ -147,6 +147,7 @@ def cMat_builder(Yhat, Y):
     df = pd.DataFrame(data={'Predicted Values': Yhat, 'Actual Values': Y})
     return pd.crosstab(df["Predicted Values"], df['Actual Values'])
 
+
 def metrics_cal(cMat):
     # Initialize the avg of metrics
     accuracy = precision = recall = F1 = 0
@@ -163,7 +164,6 @@ def metrics_cal(cMat):
     return accuracy / cMat.shape[0], precision / cMat.shape[0], recall / cMat.shape[0], F1 / cMat.shape[0]
 
 
-
 def metricsWrapper(y_train_hat, y_train, y_test_hat, y_test):
     print("Overall Accuracy for training set: ", str(np.average(y_train_hat == y_train)))
     print("Performance metrics for training set: ")
@@ -178,6 +178,19 @@ def metricsWrapper(y_train_hat, y_train, y_test_hat, y_test):
 def split_indices(indices, N=5):
     np.random.shuffle(indices)
     return np.array_split(indices, N)
+
+
+def plot_metrics_with_diff_training_size(metricsList: list):
+    plt.figure(figsize=(10, 6))
+    for metric in metricsList:
+        plt.plot(metrics_df['training_size'], metrics_df[metric], label=metric)
+
+    plt.xlabel('Training Size')
+    plt.ylabel('Metric Value')
+    plt.title('Learning Curves')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 # Multiclass Gradient descent
@@ -228,6 +241,7 @@ y_test_hat = model.predict(X_test)
 
 metricsWrapper(y_train_hat, y_train['class'].values, y_test_hat, y_test['class'].values)
 
+# 3.3.2
 # train_accuracy, train_precision, train_recall, train_F1, test_accuracy, test_precision, test_recall, test_F1
 metrics = [0 for x in range(8)]
 folds_indices = split_indices(wine_df.index.tolist())
@@ -242,7 +256,8 @@ for idx, indices in enumerate(split_indices(wine_df.index.tolist())):
     # draw_loss(logReg.L_vals)
     y_train_hat = model.predict(X_train)
     y_test_hat = model.predict(X_test)
-    train_accuracy, train_precision, train_recall, train_F1 = metrics_cal(cMat_builder(y_train_hat, y_train['class'].values))
+    train_accuracy, train_precision, train_recall, train_F1 = metrics_cal(
+        cMat_builder(y_train_hat, y_train['class'].values))
     test_accuracy, test_precision, test_recall, test_F1 = metrics_cal(cMat_builder(y_test_hat, y_test['class'].values))
     metrics[0] += train_accuracy
     metrics[1] += train_precision
@@ -253,7 +268,59 @@ for idx, indices in enumerate(split_indices(wine_df.index.tolist())):
     metrics[6] += test_recall
     metrics[7] += test_F1
 
-metrics = [metric/len(folds_indices) for metric in metrics]
+metrics = [metric / len(folds_indices) for metric in metrics]
 print("")
-print("Metrics for CV: train_accuracy, train_precision, train_recall, train_F1, test_accuracy, test_precision, test_recall, test_F1")
+print(
+    "Metrics for CV: train_accuracy, train_precision, train_recall, train_F1, test_accuracy, test_precision, test_recall, test_F1")
 print(metrics)
+
+# 3.3.3
+X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=42)
+train_sizes = np.linspace(0.2, 0.8, 7)
+
+metrics_dic = {
+    'training_size': [],
+    'train_accuracy': [],
+    'train_precision': [],
+    'train_recall': [],
+    'train_F1': [],
+    'test_accuracy': [],
+    'test_precision': [],
+    'test_recall': [],
+    'test_F1': []
+}
+
+for size in train_sizes:
+    # resize the X_train, y_train
+    X_train_temp, _, y_train_temp, _ = sklearn.model_selection.train_test_split(X_train, y_train, train_size=size,
+                                                                                random_state=11)
+
+    # Train Gradient Descent model
+    model = LogisticRegression(alpha=0.01, max_iter=70)
+    logReg = model.fit(X_train_temp, y_train_temp)
+
+    y_train_hat = model.predict(X_train_temp)
+    y_test_hat = model.predict(X_test)
+    train_accuracy, train_precision, train_recall, train_F1 \
+        = metrics_cal(cMat_builder(y_train_hat, y_train_temp['class'].values))
+    test_accuracy, test_precision, test_recall, test_F1 \
+        = metrics_cal(cMat_builder(y_test_hat, y_test['class'].values))
+
+    # Compute and store metrics
+    metrics_dic['training_size'].append(len(X_train_temp))
+    metrics_dic['train_accuracy'].append(train_accuracy)
+    metrics_dic['train_precision'].append(train_precision)
+    metrics_dic['train_recall'].append(train_recall)
+    metrics_dic['train_F1'].append(train_F1)
+    metrics_dic['test_accuracy'].append(test_accuracy)
+    metrics_dic['test_precision'].append(test_precision)
+    metrics_dic['test_recall'].append(test_recall)
+    metrics_dic['test_F1'].append(test_F1)
+
+metrics_df = pd.DataFrame(metrics_dic)
+
+train_metrics = ['train_accuracy', 'train_precision', 'train_recall', 'train_F1']
+test_metrics = ['test_accuracy', 'test_precision', 'test_recall', 'test_F1']
+
+plot_metrics_with_diff_training_size(train_metrics)
+plot_metrics_with_diff_training_size(test_metrics)
