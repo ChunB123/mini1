@@ -73,20 +73,6 @@ def eval_L_m(X, y, beta):
     return np.average([cross_entropy(y[index], softmax(xi @ beta)) for index, xi in enumerate(Xhat(X))])
 
 
-def grad_L_m_L1(X, y, beta, lambda_val=0):
-    # Gradient with L1 regularization term
-    original_gradient = (np.transpose(Xhat(X)) @ (softmax(Xhat(X) @ beta) - y)) / X.shape[0]
-    # No penalization for intercept
-    original_gradient[1:] += lambda_val * np.sign(beta[1:])
-    return original_gradient
-
-
-def eval_L_m_L1(X, y, beta, lambda_val=0):
-    # Including L1 regularization term
-    l1_penalty = lambda_val * np.sum(np.abs(beta))
-    return np.average([cross_entropy(y[index], softmax(xi @ beta)) for index, xi in enumerate(Xhat(X))]) + l1_penalty
-
-
 def train_model_using_grad_descent_multi(X, y, alpha, max_iter, eps):
     beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
     L_vals = []
@@ -253,44 +239,11 @@ class LogisticRegression:
         y_pred = [np.argmax(yi) + 1 for yi in (Xhat(X_test) @ self.beta)]
         return y_pred
 
-def train_model_using_grad_descent_multi_L1(X, y, alpha, max_iter, eps, lambda_val=0):
-    beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
-    L_vals = []
-    for _ in tqdm(range(max_iter)):
-        grad_matrix = grad_L_m_L1(X, y, beta, lambda_val)
-        if np.linalg.norm(grad_matrix) < eps:
-            break
-        beta = beta - alpha * grad_matrix
-        L_vals.append(eval_L_m_L1(X, y, beta, lambda_val))
-    return beta, L_vals
-class LogisticRegression_L1:
-    def __init__(self, alpha=0.01, max_iter=500, eps=1e-2, lambda_val=0.1):
-        self.beta = None
-        self.L_vals = None
-        self.alpha = alpha
-        self.max_iter = max_iter
-        self.eps = eps
-        self.lambda_val = lambda_val  # L1 regularization strength
-
-    def fit(self, X_train, y_train):
-        # one-hot-encoding y_train
-        unique_classes, inverse = np.unique(y_train, return_inverse=True)
-        y_train_hot = np.zeros((len(y_train), len(unique_classes)))
-        y_train_hot[np.arange(len(y_train)), inverse] = 1
-
-        self.beta, self.L_vals = train_model_using_grad_descent_multi_L1(X_train, y_train_hot, self.alpha, self.max_iter,
-                                                                      self.eps, self.lambda_val)
-        return self
-
-    def predict(self, X_test):
-        # first class in y_pred is class 2 in Y
-        y_pred = [np.argmax(yi) + 1 for yi in (Xhat(X_test) @ self.beta)]
-        return y_pred
 
 
 # Multiclass Gradient Descent with SGD
 class logReg_SGD:
-    def __init__(self, alpha=0.01, max_iter=500, eps=0.001, size=None):
+    def __init__(self, alpha=0.01, max_iter=500, eps=0.0001, size=None):
         # Size parameter is asking for the size of the weight matrix
         # Which is usually D x C (features x categories)
         # The Y expectation matrix should be one-hot encoded before being inputted
@@ -304,6 +257,7 @@ class logReg_SGD:
     # Feed the X data in a forward loop
     def forwardpass(self, X):
         a = np.dot(X, self.w)
+
         return a
 
     def SGD(self, X, Y, epochs, mini_batch_size, test_data=None):
@@ -346,6 +300,57 @@ class logReg_SGD:
         out = softmax(prediction)
 
         return np.argmax(prediction, axis=1)
+
+
+def grad_L_m_L1(X, y, beta, lambda_val=0):
+    # Gradient with L1 regularization term
+    original_gradient = (np.transpose(Xhat(X)) @ (softmax(Xhat(X) @ beta) - y)) / X.shape[0]
+    # No penalization for intercept
+    original_gradient[1:] += lambda_val * np.sign(beta[1:])
+    return original_gradient
+
+
+def eval_L_m_L1(X, y, beta, lambda_val=0):
+    # Including L1 regularization term
+    l1_penalty = lambda_val * np.sum(np.abs(beta))
+    return np.average([cross_entropy(y[index], softmax(xi @ beta)) for index, xi in enumerate(Xhat(X))]) + l1_penalty
+
+
+def train_model_using_grad_descent_multi_L1(X, y, alpha, max_iter, eps, lambda_val=0):
+    beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
+    L_vals = []
+    for _ in tqdm(range(max_iter)):
+        grad_matrix = grad_L_m_L1(X, y, beta, lambda_val)
+        if np.linalg.norm(grad_matrix) < eps:
+            break
+        beta = beta - alpha * grad_matrix
+        L_vals.append(eval_L_m_L1(X, y, beta, lambda_val))
+    return beta, L_vals
+
+class LogisticRegression_L1:
+    def __init__(self, alpha=0.01, max_iter=500, eps=1e-2, lambda_val=0.1):
+        self.beta = None
+        self.L_vals = None
+        self.alpha = alpha
+        self.max_iter = max_iter
+        self.eps = eps
+        self.lambda_val = lambda_val  # L1 regularization strength
+
+    def fit(self, X_train, y_train):
+        # one-hot-encoding y_train
+        unique_classes, inverse = np.unique(y_train, return_inverse=True)
+        y_train_hot = np.zeros((len(y_train), len(unique_classes)))
+        y_train_hot[np.arange(len(y_train)), inverse] = 1
+
+        self.beta, self.L_vals = train_model_using_grad_descent_multi_L1(X_train, y_train_hot, self.alpha,
+                                                                         self.max_iter,
+                                                                         self.eps, self.lambda_val)
+        return self
+
+    def predict(self, X_test):
+        # first class in y_pred is class 2 in Y
+        y_pred = [np.argmax(yi) + 1 for yi in (Xhat(X_test) @ self.beta)]
+        return y_pred
 
 
 # Fetch dataset
@@ -539,14 +544,33 @@ ytrain, ytest = y_train, y_test
 ytrain, ytest = onehot(ytrain), onehot(ytest)
 model_SGD = logReg_SGD(alpha=0.05, size=[X_train.shape[1], ytrain.shape[1]])
 model_SGD.SGD(X_train, ytrain, epochs=1, mini_batch_size=1, test_data=(X_test, ytest))
-ypred = onehot(np.array(model.predict(X_test)))
+ypred = onehot(np.array(model_SGD.predict(X_test)))
 printMetrics(cMatrix_log(ypred, ytest, axis=(1, 1), onehot=True))
 
 # 3.9
 X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=390)
-model_L1 = LogisticRegression_L1(alpha=0.01, max_iter=500, lambda_val=0.5)
+model_L1 = LogisticRegression_L1(alpha=0.01, max_iter=1500, lambda_val=0.5)
 logReg_L1 = model_L1.fit(X_train, y_train)
 draw_loss(logReg_L1.L_vals)
 
 avg_coef = np.mean(np.abs(logReg_L1.beta[1:]), axis=1)
-coef_filtered = np.array([coef if coef > 1e-5 else 0 for coef in avg_coef])
+coef_filtered = np.array([coef if coef > 1e-3 else 0 for coef in avg_coef])
+
+# Third feature got penalized to zero. Let's exclude it from model
+X_train_new = X_train.drop(columns=['Ash'])
+X_test_new = X_test.drop(columns=['Ash'])
+
+# Test using gradient descent
+model_GD_L1 = LogisticRegression(alpha=0.1, max_iter=20)
+logReg = model_GD_L1.fit(X_train_new, y_train)
+
+draw_loss(logReg.L_vals)
+y_train_hat = model_GD_L1.predict(X_train_new)
+y_test_hat = model_GD_L1.predict(X_test_new)
+metricsWrapper(y_train_hat, y_train['class'].values, y_test_hat, y_test['class'].values)
+
+# Test using SGD
+model_SGD = logReg_SGD(alpha=0.1, size=[X_train_new.shape[1], y_train.shape[1]])
+model_SGD.SGD(X_train_new, ytrain, epochs=30, mini_batch_size=1, test_data=(X_test_new, y_test))
+ypred = model_SGD.predict(X_test_new)
+printMetrics(cMatrix_log(ypred, y_test['class'].values, axis=(1, 1), onehot=False))
