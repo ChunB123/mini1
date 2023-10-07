@@ -73,11 +73,28 @@ def eval_L_m(X, y, beta):
     return np.average([cross_entropy(y[index], softmax(xi @ beta)) for index, xi in enumerate(Xhat(X))])
 
 
-def train_model_using_grad_descent_multi(X, y, alpha, max_iter):
+def grad_L_m_L1(X, y, beta, lambda_val=0):
+    # Gradient with L1 regularization term
+    original_gradient = (np.transpose(Xhat(X)) @ (softmax(Xhat(X) @ beta) - y)) / X.shape[0]
+    # No penalization for intercept
+    original_gradient[1:] += lambda_val * np.sign(beta[1:])
+    return original_gradient
+
+
+def eval_L_m_L1(X, y, beta, lambda_val=0):
+    # Including L1 regularization term
+    l1_penalty = lambda_val * np.sum(np.abs(beta))
+    return np.average([cross_entropy(y[index], softmax(xi @ beta)) for index, xi in enumerate(Xhat(X))]) + l1_penalty
+
+
+def train_model_using_grad_descent_multi(X, y, alpha, max_iter, eps):
     beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
     L_vals = []
     for _ in tqdm(range(max_iter)):
-        beta = beta - alpha * grad_L_m(X, y, beta)
+        grad_matrix = grad_L_m(X, y, beta)
+        if np.linalg.norm(grad_matrix) < eps:
+            break
+        beta = beta - alpha * grad_matrix
         L_vals.append(eval_L_m(X, y, beta))
     return beta, L_vals
 
@@ -160,7 +177,12 @@ def metrics_cal(cMat):
         accuracy += (TP + TN) / (TP + TN + FP + FN)
         precision += TP / (TP + FP)
         recall += TP / (TP + FN)
-        F1 += 2 * precision * recall / (precision + recall)
+        if precision + recall != 0:
+            F1_temp = 2 * precision * recall / (precision + recall)
+        else:
+            F1_temp = 0.0
+
+        F1 += F1_temp
     return accuracy / cMat.shape[0], precision / cMat.shape[0], recall / cMat.shape[0], F1 / cMat.shape[0]
 
 
@@ -180,12 +202,25 @@ def split_indices(indices, N=5):
     return np.array_split(indices, N)
 
 
-def plot_metrics_with_diff_training_size(metricsList: list):
+def plot_metrics_with_diff_training_size(metrics_df_ts, metricsList: list):
     plt.figure(figsize=(10, 6))
     for metric in metricsList:
-        plt.plot(metrics_df['training_size'], metrics_df[metric], label=metric)
+        plt.plot(metrics_df_ts['training_size'], metrics_df_ts[metric], label=metric, marker='o')
 
     plt.xlabel('Training Size')
+    plt.ylabel('Metric Value')
+    plt.title('Learning Curves')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
+def plot_metrics_with_diff_learning_rates(metrics_df_lr, metricsList: list):
+    plt.figure(figsize=(10, 6))
+    for metric in metricsList:
+        plt.plot(metrics_df_lr['learning_rates'], metrics_df_lr[metric], label=metric, marker='o')
+
+    plt.xlabel('learning_rates')
     plt.ylabel('Metric Value')
     plt.title('Learning Curves')
     plt.legend()
@@ -196,11 +231,12 @@ def plot_metrics_with_diff_training_size(metricsList: list):
 # Multiclass Gradient descent
 class LogisticRegression:
 
-    def __init__(self, alpha=0.01, max_iter=500):
+    def __init__(self, alpha=0.01, max_iter=500, eps=1e-2):
         self.beta = None
         self.L_vals = None
         self.alpha = alpha
         self.max_iter = max_iter
+        self.eps = eps
 
     def fit(self, X_train, y_train):
         # one-hot-encoding y_train
@@ -208,13 +244,108 @@ class LogisticRegression:
         y_train_hot = np.zeros((len(y_train), len(unique_classes)))
         y_train_hot[np.arange(len(y_train)), inverse] = 1
 
-        self.beta, self.L_vals = train_model_using_grad_descent_multi(X_train, y_train_hot, self.alpha, self.max_iter)
+        self.beta, self.L_vals = train_model_using_grad_descent_multi(X_train, y_train_hot, self.alpha, self.max_iter,
+                                                                      self.eps)
         return self
 
     def predict(self, X_test):
         # first class in y_pred is class 2 in Y
         y_pred = [np.argmax(yi) + 1 for yi in (Xhat(X_test) @ self.beta)]
         return y_pred
+
+def train_model_using_grad_descent_multi_L1(X, y, alpha, max_iter, eps, lambda_val=0):
+    beta = np.zeros((X.shape[1] + 1, y.shape[1])).astype("float64")
+    L_vals = []
+    for _ in tqdm(range(max_iter)):
+        grad_matrix = grad_L_m_L1(X, y, beta, lambda_val)
+        if np.linalg.norm(grad_matrix) < eps:
+            break
+        beta = beta - alpha * grad_matrix
+        L_vals.append(eval_L_m_L1(X, y, beta, lambda_val))
+    return beta, L_vals
+class LogisticRegression_L1:
+    def __init__(self, alpha=0.01, max_iter=500, eps=1e-2, lambda_val=0.1):
+        self.beta = None
+        self.L_vals = None
+        self.alpha = alpha
+        self.max_iter = max_iter
+        self.eps = eps
+        self.lambda_val = lambda_val  # L1 regularization strength
+
+    def fit(self, X_train, y_train):
+        # one-hot-encoding y_train
+        unique_classes, inverse = np.unique(y_train, return_inverse=True)
+        y_train_hot = np.zeros((len(y_train), len(unique_classes)))
+        y_train_hot[np.arange(len(y_train)), inverse] = 1
+
+        self.beta, self.L_vals = train_model_using_grad_descent_multi_L1(X_train, y_train_hot, self.alpha, self.max_iter,
+                                                                      self.eps, self.lambda_val)
+        return self
+
+    def predict(self, X_test):
+        # first class in y_pred is class 2 in Y
+        y_pred = [np.argmax(yi) + 1 for yi in (Xhat(X_test) @ self.beta)]
+        return y_pred
+
+
+# Multiclass Gradient Descent with SGD
+class logReg_SGD:
+    def __init__(self, alpha=0.01, max_iter=500, eps=0.001, size=None):
+        # Size parameter is asking for the size of the weight matrix
+        # Which is usually D x C (features x categories)
+        # The Y expectation matrix should be one-hot encoded before being inputted
+        self.w = np.random.randn(size[0], size[1])
+        self.max_iter = max_iter
+        self.alpha = alpha
+        self.cost = []
+        self.eps = eps
+        self.grad = 1
+
+    # Feed the X data in a forward loop
+    def forwardpass(self, X):
+        a = np.dot(X, self.w)
+        return a
+
+    def SGD(self, X, Y, epochs, mini_batch_size, test_data=None):
+        m, n = X.shape
+        if test_data:
+            Xtest, Ytest = test_data
+            Xtest = Xtest.values
+
+        for i in tqdm(range(1, epochs + 1)):
+            if np.linalg.norm(self.grad) < self.eps: break;
+            temp = list(zip(X.values, Y))
+            random.shuffle(temp)
+            Xshuffled, Yshuffled = zip(*temp)
+            Xshuffled, Yshuffled = np.array(Xshuffled), np.array(Yshuffled)
+
+            for k in range(0, m, mini_batch_size):
+                Xmini, Ymini = Xshuffled[k:k + mini_batch_size], Yshuffled[k:k + mini_batch_size]
+                self.update_mini_batch(Xmini, Ymini, self.alpha)
+            # if test_data:
+            #         print("Epoch {0}: {1} / {2}".format(
+            #             i, self.eval(test_data = test_data), len(Xtest)))
+            # else:
+            #         print("Epoch {0} complete".format(i))
+
+    def update_mini_batch(self, X, Y, alpha):
+        yhat = self.forwardpass(X)
+        grad = L2gradient(X, Y, yhat)
+        self.w = self.w - alpha * grad
+        self.grad = np.mean(grad)
+
+    def eval(self, test_data=None):
+        Xtest, Ytest = test_data
+        prediction = self.forwardpass(Xtest)
+        predictions = np.argmax(prediction, axis=1)
+        expected = np.argmax(Ytest, axis=1)
+        return sum(predictions == expected)
+
+    def predict(self, Xtest):
+        prediction = self.forwardpass(Xtest)
+        out = softmax(prediction)
+
+        return np.argmax(prediction, axis=1)
 
 
 # Fetch dataset
@@ -232,7 +363,7 @@ wine_df = wine_df[wine_df.ne('?').all(axis=1)]
 X = normalize_features(X)
 X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=42)
 
-model = LogisticRegression(alpha=0.01, max_iter=70)
+model = LogisticRegression(alpha=0.1, max_iter=70)
 logReg = model.fit(X_train, y_train)
 # draw_loss(logReg.L_vals)
 # performance metrics
@@ -317,10 +448,105 @@ for size in train_sizes:
     metrics_dic['test_recall'].append(test_recall)
     metrics_dic['test_F1'].append(test_F1)
 
-metrics_df = pd.DataFrame(metrics_dic)
+metrics_df_ts = pd.DataFrame(metrics_dic)
 
 train_metrics = ['train_accuracy', 'train_precision', 'train_recall', 'train_F1']
 test_metrics = ['test_accuracy', 'test_precision', 'test_recall', 'test_F1']
 
-plot_metrics_with_diff_training_size(train_metrics)
-plot_metrics_with_diff_training_size(test_metrics)
+plot_metrics_with_diff_training_size(metrics_df_ts, train_metrics)
+plot_metrics_with_diff_training_size(metrics_df_ts, test_metrics)
+
+# 3.5.1
+learning_rates = [0.0005, 0.005, 0.05, 0.5, 5, 50]
+metrics_dic_lr = {
+    'learning_rates': [],
+    'train_accuracy': [],
+    'train_precision': [],
+    'train_recall': [],
+    'train_F1': [],
+    'test_accuracy': [],
+    'test_precision': [],
+    'test_recall': [],
+    'test_F1': []
+}
+X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.95, random_state=351)
+for lr in learning_rates:
+    model = LogisticRegression(alpha=lr, max_iter=50)
+    logReg = model.fit(X_train, y_train)
+
+    y_train_hat = model.predict(X_train)
+    y_test_hat = model.predict(X_test)
+    train_accuracy, train_precision, train_recall, train_F1 \
+        = metrics_cal(cMat_builder(y_train_hat, y_train['class'].values))
+    test_accuracy, test_precision, test_recall, test_F1 \
+        = metrics_cal(cMat_builder(y_test_hat, y_test['class'].values))
+
+    # Compute and store metrics
+    metrics_dic_lr['learning_rates'].append(lr)
+    metrics_dic_lr['train_accuracy'].append(train_accuracy)
+    metrics_dic_lr['train_precision'].append(train_precision)
+    metrics_dic_lr['train_recall'].append(train_recall)
+    metrics_dic_lr['train_F1'].append(train_F1)
+    metrics_dic_lr['test_accuracy'].append(test_accuracy)
+    metrics_dic_lr['test_precision'].append(test_precision)
+    metrics_dic_lr['test_recall'].append(test_recall)
+    metrics_dic_lr['test_F1'].append(test_F1)
+
+metrics_df_lr = pd.DataFrame(metrics_dic_lr)
+plot_metrics_with_diff_learning_rates(metrics_df_lr, ['train_accuracy', 'train_precision', 'train_recall', 'train_F1'])
+plot_metrics_with_diff_learning_rates(metrics_df_lr, ['test_accuracy', 'test_precision', 'test_recall', 'test_F1'])
+
+# 3.6
+batch_sizes = [1, 4, 8, 16, 32]
+learning_rates = [0.00625, 0.0125, 0.025, 0.05, 0.075, 0.1, 0.15]
+X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=360)
+configs_dic = {
+    'batch_sizes': [],
+    'learning_rates': [],
+    'cv_F1': []
+}
+for batch_size in batch_sizes:
+    for lr in learning_rates:
+        # Use 5 folds CV to calculate the F1
+        folds_indices = split_indices(wine_df.index.tolist())
+        for idx, indices in enumerate(split_indices(wine_df.index.tolist())):
+            X_train = X.iloc[np.concatenate(folds_indices[:idx] + folds_indices[idx + 1:])]
+            X_test = X.iloc[indices.tolist()]
+            y_train = y.iloc[np.concatenate(folds_indices[:idx] + folds_indices[idx + 1:])]
+            y_test = y.iloc[indices.tolist()]
+
+            ytrain, ytest = onehot(y_train), onehot(y_test)
+            model_SGD = logReg_SGD(alpha=lr, size=[X_train.shape[1], ytrain.shape[1]])
+            model_SGD.SGD(X_train, ytrain, epochs=1, mini_batch_size=batch_size)
+
+            # draw_loss(logReg.L_vals)
+            y_train_hat = model_SGD.predict(X_train)
+            y_test_hat = model_SGD.predict(X_test)
+            _, _, _, test_F1 = metrics_cal(
+                cMat_builder(y_test_hat, y_test['class'].values))
+
+            configs_dic['batch_sizes'].append(batch_size)
+            configs_dic['learning_rates'].append(lr)
+            configs_dic['cv_F1'].append(test_F1)
+
+configs_dic_df = pd.DataFrame(configs_dic)
+
+# Best combination: batch_sizes=1, lr=0.05
+
+# Performance on Test dataset
+# Testing out SGD logistic regression
+ytrain, ytest = y_train, y_test
+ytrain, ytest = onehot(ytrain), onehot(ytest)
+model_SGD = logReg_SGD(alpha=0.05, size=[X_train.shape[1], ytrain.shape[1]])
+model_SGD.SGD(X_train, ytrain, epochs=1, mini_batch_size=1, test_data=(X_test, ytest))
+ypred = onehot(np.array(model.predict(X_test)))
+printMetrics(cMatrix_log(ypred, ytest, axis=(1, 1), onehot=True))
+
+# 3.9
+X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=0.2, random_state=390)
+model_L1 = LogisticRegression_L1(alpha=0.01, max_iter=500, lambda_val=0.5)
+logReg_L1 = model_L1.fit(X_train, y_train)
+draw_loss(logReg_L1.L_vals)
+
+avg_coef = np.mean(np.abs(logReg_L1.beta[1:]), axis=1)
+coef_filtered = np.array([coef if coef > 1e-5 else 0 for coef in avg_coef])
