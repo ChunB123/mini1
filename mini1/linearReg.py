@@ -142,7 +142,7 @@ class GSSampller:
 
 
 # Define the file path
-dataset_path = "/home/ff/Documents/McGill/CS551/mini1/boston.csv"
+dataset_path = "/mini1/boston.csv"
 housing_df = preprocessing(dataset_path)
 X = z_score_normalize_column(housing_df.drop(columns=['MEDV']).values.astype('float64'))
 y = housing_df['MEDV'].values
